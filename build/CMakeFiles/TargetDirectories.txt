@@ -1,0 +1,3 @@
+/media/mohammad/1ED9E8D6138E29102/Univesity/Term4/Internet measurment/project/code/build/CMakeFiles/rebuild_cache.dir
+/media/mohammad/1ED9E8D6138E29102/Univesity/Term4/Internet measurment/project/code/build/CMakeFiles/edit_cache.dir
+/media/mohammad/1ED9E8D6138E29102/Univesity/Term4/Internet measurment/project/code/build/CMakeFiles/TCPDump.dir
