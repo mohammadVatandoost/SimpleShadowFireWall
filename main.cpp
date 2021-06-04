@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <vector>
 #include<net/ethernet.h>
 #include<netinet/ip_icmp.h>	
 #include<netinet/udp.h>	
@@ -14,7 +15,6 @@ extern "C" {
 }
 
 
-
 using namespace std;
 
 #define DOS_Time_Theresould 200  // mili second
@@ -24,9 +24,10 @@ static int packetCount = 0;
 struct BlackItem {
 	int portNumber = 0;
 	std::string ipAddr = "";
-}
+};
 
-std::map<BlackItem> bItems;
+// first ip+port
+std::map<string, BlackItem> bItems;
 std::vector<string> blackAnalyseResult;
 
 void check_black_list() {
@@ -41,8 +42,9 @@ struct packetSource {
 	std::string ipAddr = "";
 	double packet1Time = 0;
 	double packet2Time = 0;
-}
-std::map<packetSourceItem> pSources;
+};
+// first ip+port
+std::map<string,packetSource> pSources;
 std::vector<string> dosResult;
 
 
@@ -59,10 +61,10 @@ struct packetInfo {
 
     int destPortNumber = 0;
 	std::string destIpAddr = "";
-}
+};
 
 // source: ip+port,  dest: ip+port, 
-map<string, string> validRoutes;
+std::map<string, string> validRoutes;
 std::vector<string> unValidResults;
 
 void check_dest_address() {
