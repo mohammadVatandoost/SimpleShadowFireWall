@@ -14,6 +14,7 @@ extern "C" {
     #include <pcap.h>
 }
 
+#include <httplib.h>
 
 using namespace std;
 
@@ -206,6 +207,15 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
   cout<<"Packet:"<<string((char*)packet)<<endl;
 }
 
+
+void routes() {
+  httplib::Server svr;
+  svr.Get("/dashboard", [](const httplib::Request &, httplib::Response &res) {
+      res.set_content("Hello World!", "text/plain");
+  });
+  svr.listen("localhost", 8080);
+}
+
 int main() {
   char *dev;
   pcap_t *descr;
@@ -228,7 +238,9 @@ int main() {
       return 1;
   }
 
-  cout << "capture finished" << endl;
+
+
+  cout << "Shadow firewall finished" << endl;
 
   return 0;
 }
