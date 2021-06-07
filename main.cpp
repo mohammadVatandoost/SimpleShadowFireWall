@@ -1,6 +1,8 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <thread>   
+#include <mutex>
 #include<net/ethernet.h>
 #include<netinet/ip_icmp.h>	
 #include<netinet/udp.h>	
@@ -15,10 +17,13 @@ extern "C" {
 }
 
 #include <httplib.h>
+#include <json.hpp>
 
 using namespace std;
 
 #define DOS_Time_Theresould 200  // mili second
+
+static std::mutex mLock;
 
 static int packetCount = 0;
 
@@ -66,7 +71,9 @@ struct packetInfo {
 
 // source: ip+port,  dest: ip+port, 
 std::map<string, string> validRoutes;
-std::vector<string> unValidResults;
+std::vector<string> unvalidRoutesResult;
+
+
 
 void check_dest_address() {
     // if it does not exist in valid routes, push message to unValidResults and print it
@@ -211,15 +218,64 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
 void routes() {
   httplib::Server svr;
   svr.Get("/dashboard", [](const httplib::Request &, httplib::Response &res) {
-      res.set_content("Hello World!", "text/plain");
+	  mLock.lock();
+      nlohmann::json response;
+      nlohmann::json blackListJSONArray;
+	  nlohmann::json blackListResJSONArray;
+	  nlohmann::json DOSResJSONArray;
+	  nlohmann::json unvalidRoutesJSONArray;
+	  nlohmann::json unvalidRoutesResJSONArray;
+
+      for(auto it = bItems.begin(); it != bItems.end(); it++) {
+		  blackListJSONArray.push_back(it->second.ipAddr+std::to_string(it->second.portNumber)) ;
+	  }
+
+      for(auto v : blackAnalyseResult) {
+          blackListResJSONArray.push_back(v);
+      }
+
+      for(auto v : dosResult) {
+          DOSResJSONArray.push_back(v);
+      }
+
+      for(auto it = validRoutes.begin(); it != validRoutes.end(); it++) {
+          blackListJSONArray.push_back(it->second) ;
+      }
+
+      for(auto v : unvalidRoutesResult) {
+          unvalidRoutesResJSONArray.push_back(v);
+      }
+
+      response["blackList"] = blackListJSONArray;
+      if(blackListJSONArray.empty() ) {response["blackList"] = "";}
+
+      response["blackListResult"] = blackListResJSONArray;
+      if(blackListResJSONArray.empty() ) {response["blackListResult"] = "";}
+
+      response["DOSResult"] = DOSResJSONArray;
+      if(DOSResJSONArray.empty() ) {response["DOSResult"] = "";}
+
+      response["unvalidRoutes"] = blackListJSONArray;
+      if(blackListJSONArray.empty()) {response["unvalidRoutes"] = "";}
+
+      response["unvalidRoutesResult"] = unvalidRoutesResJSONArray;
+      if(unvalidRoutesResJSONArray.empty()) {response["unvalidRoutesResult"] = "";}
+
+      std::string responseString = response.dump();
+      mLock.unlock();
+      res.set_content(responseString, "text/plain");
   });
-  svr.listen("localhost", 8080);
+  svr.listen("localhost", 9595);
 }
 
 int main() {
   char *dev;
   pcap_t *descr;
   char errbuf[PCAP_ERRBUF_SIZE];
+
+  std::thread httpHandler (routes);
+  
+  
 
   dev = pcap_lookupdev(errbuf);
   if (dev == NULL) {
@@ -239,7 +295,7 @@ int main() {
   }
 
 
-
+  httpHandler.join();
   cout << "Shadow firewall finished" << endl;
 
   return 0;
