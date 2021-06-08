@@ -11,7 +11,10 @@
 #include<sys/socket.h>
 #include<arpa/inet.h> 
 #include<string.h> 
-
+#include<time.h>
+#include<queue>
+#include<map>
+#include"md5.h"
 extern "C" {
     #include <pcap.h>
 }
@@ -53,11 +56,70 @@ struct packetSource {
 std::map<string,packetSource> pSources;
 std::vector<string> dosResult;
 
+#define DOS_WINDOW 10 //secods
+#define SRC_THRESH 10
+#define SRC_DST_THRESH 5
+struct dos_packet{
+	long long time;
+	std::string srcip;
+	std::string dstip;
+	std::string dstport;
+};
+std::map<std::string,int> src_count;
+std::map<std::string,int> src_dst_count;
+std::queue<dos_packet> dos_packet_queue;
+std::hash<std::string> hash_func;
+void check_DOS_attack(const char * src_ip, const char * dst_ip, int dst_port) {
+    dos_packet p;
+    p.time=(long long)time(NULL);
+    p.srcip=std::string(src_ip);
+    p.dstip=std::string(dst_ip);
+    p.dstport=std::to_string(dst_port);
+    dos_packet_queue.push(p);
+    string src_hash="";
+    string src_dst_hash="";
+    while(dos_packet_queue.front().time<(p.time-DOS_WINDOW))
+    {
+	    dos_packet packet=dos_packet_queue.front();
+	    //src_hash=hash_func(packet.srcip);
+	    //src_dst_hash=hash_func(packet.srcip+packet.dstip+packet.dstport);
+	    src_hash=md5(packet.srcip);
+	    src_dst_hash=md5(packet.srcip+packet.dstip+packet.dstport);
+	    src_count[src_hash]--;
+	    src_dst_count[src_dst_hash]--;
+	    dos_packet_queue.pop();
+    }
+    //src_hash=hash_func(p.srcip);
+    //src_dst_hash=hash_func(p.srcip+p.dstip+p.dstport);
+    src_hash=md5(p.srcip);
+    src_dst_hash=md5(p.srcip+p.dstip+p.dstport);
 
-void check_DOS_attack() {
-   // check time interval of packets
+    if(src_count.find(src_hash)==src_count.end())
+	    src_count[src_hash]=0;
+    if(src_dst_count.find(src_dst_hash)==src_dst_count.end())
+	    src_dst_count[src_dst_hash]=0;
+    
+    src_count[src_hash]++;
+    src_dst_count[src_dst_hash]++;
+   
+  //  cout<<"src_hash= "<<src_hash<<", src_count["<<src_hash<<"]="<<src_count[src_hash]<<"------ src_dst_hash="<<src_dst_hash<<",src_dst_count["<<src_dst_hash<<"]="<<src_dst_count[src_dst_hash]<<std::endl;
 
-   // if 3 packets come in DOS_Time_Theresould , push message to dosResult and print it
+    string msg="Dos Attack: too many requests from ";
+
+
+	  mLock.lock();
+    if(src_count[src_hash]>SRC_THRESH)
+    { 
+	    dosResult.push_back(msg+p.srcip);
+    	    src_count[src_hash]=0;
+    }
+    if(src_dst_count[src_dst_hash]>SRC_DST_THRESH)
+    {
+	    dosResult.push_back(msg+p.srcip+" to "+p.dstip+":"+p.dstport);
+    	    src_dst_count[src_dst_hash]=0;
+    }
+  	    mLock.unlock();
+
 }
 
 
@@ -119,6 +181,8 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
 	
 	int header_size=0;
+
+	int port=0;
 	
 	/*ICMP*/
 	if(iph->protocol==1)
@@ -178,7 +242,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("\n");
 		printf("                        DATA Dump                         ");
 		printf("\n");
-
+		port=tcph->dest;
 	
 	}
 
@@ -199,9 +263,10 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("   |-UDP Checksum     : %d\n" , ntohs(udph->check));
 		
 		printf("\n");
+		port=udph->dest;
 	}
 
-
+	check_DOS_attack(inet_ntoa(source.sin_addr), inet_ntoa(dest.sin_addr) ,port);
 
 
 }
@@ -211,7 +276,7 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
   cout << ++packetCount << " packet(s) captured" << endl;
   cout<<"Packet length:"<<pkthdr->len<<", time interval:" << pkthdr->ts.tv_sec <<endl;
 //   cout<<"useprData:"<<useprData<<endl;
-  cout<<"Packet:"<<string((char*)packet)<<endl;
+  //cout<<"Packet:"<<string((char*)packet)<<endl;
 }
 
 

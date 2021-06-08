@@ -8,5 +8,5 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 include_directories(include)
 
 # add the executable libpcap.a
-add_executable(Shadow main.cpp include/httplib.h include/json.hpp)
+add_executable(Shadow main.cpp md5.h md5.cpp include/httplib.h include/json.hpp)
 target_link_libraries(Shadow PUBLIC pcap pthread)
