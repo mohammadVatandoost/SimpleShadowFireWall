@@ -227,7 +227,7 @@ void routes() {
 	  nlohmann::json unvalidRoutesResJSONArray;
 
       for(auto it = bItems.begin(); it != bItems.end(); it++) {
-		  blackListJSONArray.push_back(it->second.ipAddr+std::to_string(it->second.portNumber)) ;
+		  blackListJSONArray.push_back(it->second.ipAddr+":"+std::to_string(it->second.portNumber)) ;
 	  }
 
       for(auto v : blackAnalyseResult) {
@@ -264,6 +264,19 @@ void routes() {
       std::string responseString = response.dump();
       mLock.unlock();
       res.set_content(responseString, "text/plain");
+  });
+
+  svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res) {
+        auto ip = req.get_header_value("ip");
+       auto port = req.get_header_value("port");
+       std::cout<<" add-black-list request, ip"<<ip<<", port:"<<port<<std::endl;
+      BlackItem bItem;
+      bItem.ipAddr = ip;
+      bItem.portNumber = std::stoi(port);
+      mLock.lock();
+      bItems.insert(std::pair<std::string, BlackItem>( ip+":"+port, bItem ));
+      mLock.unlock();
+      res.status = 200;
   });
   svr.listen("localhost", 9595);
 }
