@@ -1,17 +1,20 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include <thread>   
+#include <thread>
 #include <mutex>
 #include<net/ethernet.h>
-#include<netinet/ip_icmp.h>	
-#include<netinet/udp.h>	
-#include<netinet/tcp.h>	
+#include<netinet/ip_icmp.h>
+#include<netinet/udp.h>
+#include<netinet/tcp.h>
 #include<netinet/ip.h>
 #include<sys/socket.h>
-#include<arpa/inet.h> 
-#include<string.h> 
-
+#include<arpa/inet.h>
+#include<string.h>
+#include<time.h>
+#include<queue>
+#include<map>
+#include"md5.h"
 extern "C" {
     #include <pcap.h>
 }
@@ -30,16 +33,56 @@ static int packetCount = 0;
 struct BlackItem {
 	int portNumber = 0;
 	std::string ipAddr = "";
+	std::string dstip = "";
 };
 
 // first ip+port
 std::map<string, BlackItem> bItems;
 std::vector<string> blackAnalyseResult;
 
-void check_black_list() {
-    // check exist in bItem
+std::vector<string> blacklistIP;
+std::vector<int> blacklistPort;
 
-	// if it was in black items, push message to blackAnalyseResult and print it
+void check_black_list(const char * src_ip, const char * dst_ip, int src_port) {
+  // check exist in bItem
+BlackItem b;
+b.ipAddr=std::string(src_ip);
+b.dstip=std::string();
+b.portNumber=src_port;
+
+string ip;
+int port;
+  string answer;
+
+
+//add new ip to blacklist
+cout<<"Do you want to add someone to the blacklist?(Y/y)";
+  cin>>answer;
+  if(answer == "Y" || answer == "y"){
+  cout<<"enter ip:";
+      cin>>ip;
+  cout<<"enter Port number";
+  cin>>port;
+  blacklistIP.push_back(ip);
+  blacklistPort.push_back(port);
+
+}
+
+
+string msg2 = " port number, which is on the blacklist, tried to get device ";
+string msg1 ="IP with";
+string strPortNum;
+
+
+//comparison of source IP with blacklisted IP
+for (decltype(blacklistIP.size()) i = 0; i <= blacklistIP.size() - 1; i++){
+  // if it was in black items, push message to blackAnalyseResult and print it
+    if(b.ipAddr.compare(blacklistIP[i]) == 0 & b.portNumber==blacklistPort[i]){
+    strPortNum = to_string(b.portNumber);
+      blackAnalyseResult.push_back(b.ipAddr+msg1+strPortNum+msg2+b.dstip);
+    cout<<b.ipAddr+msg1+strPortNum+msg2+b.dstip;
+  }
+}
 }
 
 
@@ -53,11 +96,72 @@ struct packetSource {
 std::map<string,packetSource> pSources;
 std::vector<string> dosResult;
 
+#define DOS_WINDOW 10 //secods
+#define SRC_THRESH 10
+#define SRC_DST_THRESH 5
+struct dos_packet{
+	long long time;
+	std::string srcip;
+	std::string dstip;
+	std::string dstport;
+};
+std::map<std::string,int> src_count;
+std::map<std::string,int> src_dst_count;
+std::queue<dos_packet> dos_packet_queue;
+std::hash<std::string> hash_func;
+void check_DOS_attack(const char * src_ip, const char * dst_ip, int dst_port) {
+    dos_packet p;
+    p.time=(long long)time(NULL);
+    p.srcip=std::string(src_ip);
+    p.dstip=std::string(dst_ip);
+    p.dstport=std::to_string(dst_port);
+    dos_packet_queue.push(p);
+    string src_hash="";
+    string src_dst_hash="";
+    while(dos_packet_queue.front().time<(p.time-DOS_WINDOW))
+    {
+	    dos_packet packet=dos_packet_queue.front();
+	    //src_hash=hash_func(packet.srcip);
+	    //src_dst_hash=hash_func(packet.srcip+packet.dstip+packet.dstport);
+	    src_hash=md5(packet.srcip);
+	    src_dst_hash=md5(packet.srcip+packet.dstip+packet.dstport);
+	    src_count[src_hash]--;
+	    src_dst_count[src_dst_hash]--;
+	    dos_packet_queue.pop();
+    }
+    //src_hash=hash_func(p.srcip);
+    //src_dst_hash=hash_func(p.srcip+p.dstip+p.dstport);
+    src_hash=md5(p.srcip);
+    src_dst_hash=md5(p.srcip+p.dstip+p.dstport);
 
-void check_DOS_attack() {
-   // check time interval of packets
+    if(src_count.find(src_hash)==src_count.end())
+	    src_count[src_hash]=0;
+    if(src_dst_count.find(src_dst_hash)==src_dst_count.end())
+	    src_dst_count[src_dst_hash]=0;
 
-   // if 3 packets come in DOS_Time_Theresould , push message to dosResult and print it
+    src_count[src_hash]++;
+    src_dst_count[src_dst_hash]++;
+
+  //  cout<<"src_hash= "<<src_hash<<", src_count["<<src_hash<<"]="<<src_count[src_hash]<<"------ src_dst_hash="<<src_dst_hash<<",src_dst_count["<<src_dst_hash<<"]="<<src_dst_count[src_dst_hash]<<std::endl;
+
+    string msg="Dos Attack: too many requests from ";
+
+    blacklistIP.push_back(p.srcip);
+  //  blacklistPort.push_back(p.srcport);
+
+	  mLock.lock();
+    if(src_count[src_hash]>SRC_THRESH)
+    {
+	    dosResult.push_back(msg+p.srcip);
+    	    src_count[src_hash]=0;
+    }
+    if(src_dst_count[src_dst_hash]>SRC_DST_THRESH)
+    {
+	    dosResult.push_back(msg+p.srcip+" to "+p.dstip+":"+p.dstport);
+    	    src_dst_count[src_dst_hash]=0;
+    }
+  	    mLock.unlock();
+
 }
 
 
@@ -69,7 +173,7 @@ struct packetInfo {
 	std::string destIpAddr = "";
 };
 
-// source: ip+port,  dest: ip+port, 
+// source: ip+port,  dest: ip+port,
 std::map<string, string> validRoutes;
 std::vector<string> unvalidRoutesResult;
 
@@ -92,13 +196,13 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf( "   |-Destination Address : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_dest[0] , eth->h_dest[1] , eth->h_dest[2] , eth->h_dest[3] , eth->h_dest[4] , eth->h_dest[5] );
 	printf( "   |-Source Address      : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_source[0] , eth->h_source[1] , eth->h_source[2] , eth->h_source[3] , eth->h_source[4] , eth->h_source[5] );
 	printf("   |-Protocol            : %u \n",(unsigned short)eth->h_proto);
-	
-	
+
+
 	/*IP*/
 	struct iphdr *iph=(struct iphdr *) (buffer + sizeof(struct ethhdr));
 	int iphdrlen=iph->ihl*4;
 	struct sockaddr_in source,dest;
-	
+
 	memset(&source, 0, sizeof(source));
 	source.sin_addr.s_addr = iph->saddr;
 
@@ -117,23 +221,25 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf("   |-Checksum : %d\n",ntohs(iph->check));
 	printf("   |-Source IP        : %s\n" , inet_ntoa(source.sin_addr) );
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
-	
+
 	int header_size=0;
-	
+
+	int port=0;
+
 	/*ICMP*/
 	if(iph->protocol==1)
 	{
-	
+
 		struct icmphdr *icmph = (struct icmphdr *)(buffer + iphdrlen  + sizeof(struct ethhdr));
-	
+
 		header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof icmph;
-	
-	
-			
-		printf("\n");	
+
+
+
+		printf("\n");
 		printf("ICMP Header\n");
 		printf("   |-Type : %d",(unsigned int)(icmph->type));
-			
+
 		if((unsigned int)(icmph->type) == 11)
 		{
 			printf("  (TTL Expired)\n");
@@ -142,12 +248,12 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		{
 			printf("  (ICMP Echo Reply)\n");
 		}
-	
+
 		printf("   |-Code : %d\n",(unsigned int)(icmph->code));
 		printf("   |-Checksum : %d\n",ntohs(icmph->checksum));
 		printf("\n");
-	
-		
+
+
 	}
 
 	/*TCP*/
@@ -178,30 +284,31 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("\n");
 		printf("                        DATA Dump                         ");
 		printf("\n");
+		port=tcph->dest;
 
-	
 	}
 
 	/*UDP*/
 	if(iph->protocol==17)
 	{
-	
+
 		struct udphdr *udph = (struct udphdr*)(buffer + iphdrlen  + sizeof(struct ethhdr));
-	
+
 		header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof udph;
-	
-	
-	
+
+
+
 		printf("\nUDP Header\n");
 		printf("   |-Source Port      : %d\n" , ntohs(udph->source));
 		printf("   |-Destination Port : %d\n" , ntohs(udph->dest));
 		printf("   |-UDP Length       : %d\n" , ntohs(udph->len));
 		printf("   |-UDP Checksum     : %d\n" , ntohs(udph->check));
-		
+
 		printf("\n");
+		port=udph->dest;
 	}
 
-
+	check_DOS_attack(inet_ntoa(source.sin_addr), inet_ntoa(dest.sin_addr) ,port);
 
 
 }
@@ -211,7 +318,7 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
   cout << ++packetCount << " packet(s) captured" << endl;
   cout<<"Packet length:"<<pkthdr->len<<", time interval:" << pkthdr->ts.tv_sec <<endl;
 //   cout<<"useprData:"<<useprData<<endl;
-  cout<<"Packet:"<<string((char*)packet)<<endl;
+  //cout<<"Packet:"<<string((char*)packet)<<endl;
 }
 
 
@@ -227,7 +334,7 @@ void routes() {
 	  nlohmann::json unvalidRoutesResJSONArray;
 
       for(auto it = bItems.begin(); it != bItems.end(); it++) {
-		  blackListJSONArray.push_back(it->second.ipAddr+":"+std::to_string(it->second.portNumber)) ;
+		  blackListJSONArray.push_back(it->second.ipAddr+std::to_string(it->second.portNumber)) ;
 	  }
 
       for(auto v : blackAnalyseResult) {
@@ -265,19 +372,6 @@ void routes() {
       mLock.unlock();
       res.set_content(responseString, "text/plain");
   });
-
-  svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res) {
-        auto ip = req.get_header_value("ip");
-       auto port = req.get_header_value("port");
-       std::cout<<" add-black-list request, ip"<<ip<<", port:"<<port<<std::endl;
-      BlackItem bItem;
-      bItem.ipAddr = ip;
-      bItem.portNumber = std::stoi(port);
-      mLock.lock();
-      bItems.insert(std::pair<std::string, BlackItem>( ip+":"+port, bItem ));
-      mLock.unlock();
-      res.status = 200;
-  });
   svr.listen("localhost", 9595);
 }
 
@@ -287,8 +381,8 @@ int main() {
   char errbuf[PCAP_ERRBUF_SIZE];
 
   std::thread httpHandler (routes);
-  
-  
+
+
 
   dev = pcap_lookupdev(errbuf);
   if (dev == NULL) {
