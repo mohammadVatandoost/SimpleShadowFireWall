@@ -9,7 +9,8 @@
 #include<netinet/tcp.h>	
 #include<netinet/ip.h>
 #include<sys/socket.h>
-#include<arpa/inet.h> 
+#include<arpa/inet.h>
+#include <fstream>
 #include<string.h> 
 
 extern "C" {
@@ -20,6 +21,8 @@ extern "C" {
 #include <json.hpp>
 
 using namespace std;
+
+std::ofstream MyFile("packetsData.csv");
 
 #define DOS_Time_Theresould 200  // mili second
 
@@ -79,7 +82,18 @@ void check_dest_address() {
     // if it does not exist in valid routes, push message to unValidResults and print it
 }
 
+void saveMACAddresses(struct ethhdr *eth ) {
+    char temp1[50],temp2[50];
+    int n1 = std::sprintf (temp1, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", eth->h_dest[0] , eth->h_dest[1] , eth->h_dest[2] , eth->h_dest[3] , eth->h_dest[4] , eth->h_dest[5] );
+    int n2 = std::sprintf (temp2, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", eth->h_source[0] , eth->h_source[1] , eth->h_source[2] , eth->h_source[3] , eth->h_source[4] , eth->h_source[5] );
+    MyFile<< std::string(temp1)<<",";
+    MyFile<< std::string(temp2)<<",";
+}
 
+void saveTime() {
+    uint64_t microseconds_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    MyFile<< microseconds_since_epoch<<",";
+}
 
 void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 {
@@ -92,8 +106,14 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf( "   |-Destination Address : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_dest[0] , eth->h_dest[1] , eth->h_dest[2] , eth->h_dest[3] , eth->h_dest[4] , eth->h_dest[5] );
 	printf( "   |-Source Address      : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_source[0] , eth->h_source[1] , eth->h_source[2] , eth->h_source[3] , eth->h_source[4] , eth->h_source[5] );
 	printf("   |-Protocol            : %u \n",(unsigned short)eth->h_proto);
-	
-	
+
+//    MyFile<<  eth->h_dest[0]<<"-"<< eth->h_dest[1]<<"-"<< eth->h_dest[2]<< "-"<< eth->h_dest[3] <<
+//    "-"<< eth->h_dest[4] << "-"<< eth->h_dest[5] << ",";
+//    MyFile<<  eth->h_source[0]<<"-"<< eth->h_source[1]<<"-"<< eth->h_source[2]<< "-"<< eth->h_source[3] <<
+//          "-"<< eth->h_source[4] << "-"<< eth->h_source[5] << ",";
+    saveTime();
+    saveMACAddresses(eth );
+    MyFile<< (unsigned short)eth->h_proto << ",";
 	/*IP*/
 	struct iphdr *iph=(struct iphdr *) (buffer + sizeof(struct ethhdr));
 	int iphdrlen=iph->ihl*4;
@@ -117,9 +137,20 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf("   |-Checksum : %d\n",ntohs(iph->check));
 	printf("   |-Source IP        : %s\n" , inet_ntoa(source.sin_addr) );
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
-	
-	int header_size=0;
-	
+
+    MyFile<< (unsigned int)iph->version<< ",";
+    MyFile<< (unsigned int)iph->ihl<< ",";
+    MyFile<< ((unsigned int)(iph->ihl))*4<< ",";
+    MyFile<< (unsigned int)iph->tos<< ",";
+    MyFile<< ntohs(iph->tot_len)<< ",";
+    MyFile<< (unsigned int)iph->ttl<< ",";
+    MyFile<< (unsigned int)iph->protocol<< ",";
+    MyFile<< ntohs(iph->check)<< ",";
+    MyFile<< inet_ntoa(source.sin_addr)<< ",";
+    MyFile<< inet_ntoa(dest.sin_addr)<< ",";
+    MyFile<< std::endl;
+
+    int header_size=0;
 	/*ICMP*/
 	if(iph->protocol==1)
 	{
@@ -286,7 +317,10 @@ int main() {
   pcap_t *descr;
   char errbuf[PCAP_ERRBUF_SIZE];
 
-  std::thread httpHandler (routes);
+    MyFile<< "Time(uS) , Destination Address , Source Address, Protocol, IP Version, IP Header Length , "<<
+             " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Destination IP " <<  std::endl;
+
+    std::thread httpHandler (routes);
   
   
 
@@ -307,8 +341,9 @@ int main() {
       return 1;
   }
 
-
+    MyFile.close();
   httpHandler.join();
+
   cout << "Shadow firewall finished" << endl;
 
   return 0;
