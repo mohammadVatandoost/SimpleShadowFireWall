@@ -4,11 +4,11 @@ import socket
 import sys
 
 HOST = '127.0.0.1'
-PORT = 20002
+PORT = 5367
 buffer_size  = 1024
 
 choice = raw_input(" UDP or TCP(U/T?):")
-
+# choice = "T"
 def udp_server():
     # Create socket
     udp_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)

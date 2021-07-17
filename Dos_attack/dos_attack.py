@@ -18,7 +18,7 @@ duration =random.uniform(0.05,0.1)  #50-100 ms. for DDos attack use this line.
 duration = 0.5 #50 ms for Dos attack
 buffer_size = 1024
 choice = raw_input(" UDP or TCP(U/T?):")
-
+# choice = "T"
 def usage():
     print("Set the IP and the port.")
     print("Usage:" + sys.argv[0]+ " <ip> <port>")

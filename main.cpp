@@ -20,6 +20,9 @@ extern "C" {
 #include <httplib.h>
 #include <json.hpp>
 
+
+#define LogPacket false
+
 using namespace std;
 
 std::ofstream *outputFile;
@@ -98,15 +101,17 @@ void saveTime() {
 void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 {
 	int size= header->len;
-	printf("-------------------------------------\n");
+	
 
 	/*Ethernet*/
 	struct ethhdr *eth = (struct ethhdr *)buffer;
+    if(LogPacket) {
+        printf("-------------------------------------\n");
 	printf("Ethernet: \n");
 	printf( "   |-Destination Address : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_dest[0] , eth->h_dest[1] , eth->h_dest[2] , eth->h_dest[3] , eth->h_dest[4] , eth->h_dest[5] );
 	printf( "   |-Source Address      : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X \n", eth->h_source[0] , eth->h_source[1] , eth->h_source[2] , eth->h_source[3] , eth->h_source[4] , eth->h_source[5] );
 	printf("   |-Protocol            : %u \n",(unsigned short)eth->h_proto);
-
+    }
 
     saveTime();
     saveMACAddresses(eth );
@@ -121,7 +126,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 
 	memset(&dest, 0, sizeof(dest));
 	dest.sin_addr.s_addr = iph->daddr;
-
+if(LogPacket) {
 	printf("\n");
 	printf("IP Header\n");
 	printf("   |-IP Version        : %d\n",(unsigned int)iph->version);
@@ -134,6 +139,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	printf("   |-Checksum : %d\n",ntohs(iph->check));
 	printf("   |-Source IP        : %s\n" , inet_ntoa(source.sin_addr) );
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
+}
 
     (*outputFile)<< (unsigned int)iph->version<< ",";
     (*outputFile)<< (unsigned int)iph->ihl<< ",";
@@ -157,8 +163,8 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof icmph;
 	
 	
-			
-		printf("\n");	
+		if(LogPacket) {
+            printf("\n");	
 		printf("ICMP Header\n");
 		printf("   |-Type : %d",(unsigned int)(icmph->type));
 			
@@ -174,6 +180,9 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("   |-Code : %d\n",(unsigned int)(icmph->code));
 		printf("   |-Checksum : %d\n",ntohs(icmph->checksum));
 		printf("\n");
+
+        }	
+		
 	
 		
 	}
@@ -186,7 +195,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		struct tcphdr *tcph=(struct tcphdr*)(buffer + iphdrlen + sizeof(struct ethhdr));
 
 		header_size =  sizeof(struct ethhdr) + iphdrlen + tcph->doff*4;
-
+     if(LogPacket) { 
 		printf("\n");
 		printf("TCP Header\n");
 		printf("   |-Source Port      : %u\n",ntohs(tcph->source));
@@ -207,7 +216,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("                        DATA Dump                         ");
 		printf("\n");
 
-	
+     }
 	}
 
 	/*UDP*/
@@ -218,7 +227,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 	
 		header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof udph;
 	
-	
+	 if(LogPacket) { 
 	
 		printf("\nUDP Header\n");
 		printf("   |-Source Port      : %d\n" , ntohs(udph->source));
@@ -227,6 +236,7 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 		printf("   |-UDP Checksum     : %d\n" , ntohs(udph->check));
 		
 		printf("\n");
+     }
 	}
 
 
@@ -236,10 +246,13 @@ void process_packet( const struct pcap_pkthdr *header, const u_char *buffer)
 
 void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_char* packet) {
   process_packet(pkthdr,packet);
-  cout << ++packetCount << " packet(s) captured" << endl;
+  if(LogPacket) { 
+       cout << ++packetCount << " packet(s) captured" << endl;
   cout<<"Packet length:"<<pkthdr->len<<", time interval:" << pkthdr->ts.tv_sec <<endl;
 //   cout<<"useprData:"<<useprData<<endl;
   cout<<"Packet:"<<string((char*)packet)<<endl;
+  }
+ 
 }
 
 
@@ -315,10 +328,8 @@ int main() {
   startTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
   char errbuf[PCAP_ERRBUF_SIZE];
 
-    
-
-   std::thread httpHandler (routes);
-  
+  std::thread httpHandler (routes);
+  int number_of_time_slots = 100; 
   
 
   dev = pcap_lookupdev(errbuf);
@@ -332,17 +343,21 @@ int main() {
       cout << "pcap_open_live() failed: " << errbuf << endl;
       return 1;
   }
-
-  outputFile = new std::ofstream ("packetsData.csv");
-  (*outputFile) << "Time(uS) , Destination Address , Source Address, Protocol, IP Version, IP Header Length , "<<
+  for(int i=0; i< number_of_time_slots; i++) {
+      cout<<"----- time slot :"<< i << "--------------" << endl;
+       outputFile = new std::ofstream ("packetsData_"+std::to_string(i)+".csv");
+   (*outputFile) << "Time(uS) , Destination Address , Source Address, Protocol, IP Version, IP Header Length , "<<
              " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Destination IP " <<  std::endl;
   if (pcap_loop(descr, 100, packetHandler, NULL) < 0) {
       cout << "pcap_loop() failed: " << pcap_geterr(descr);
       return 1;
   }
 
-  outputFile->close();
+   outputFile->close();
 
+  }
+ 
+  cout<<"listening to http reques" << endl;
   httpHandler.join();
 
   cout << "Shadow firewall finished" << endl;
