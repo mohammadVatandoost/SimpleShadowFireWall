@@ -141,7 +141,7 @@ if(LogPacket) {
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
 }
 
-    (*outputFile)<< (unsigned int)iph->version<< ",";
+   (*outputFile)<< (unsigned int)iph->version<< ",";
     (*outputFile)<< (unsigned int)iph->ihl<< ",";
     (*outputFile)<< ((unsigned int)(iph->ihl))*4<< ",";
     (*outputFile)<< (unsigned int)iph->tos<< ",";
@@ -149,9 +149,6 @@ if(LogPacket) {
     (*outputFile)<< (unsigned int)iph->ttl<< ",";
     (*outputFile)<< (unsigned int)iph->protocol<< ",";
     (*outputFile)<< ntohs(iph->check)<< ",";
-    (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
-    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
-    (*outputFile)<< std::endl;
 
     int header_size=0;
 	/*ICMP*/
@@ -217,6 +214,13 @@ if(LogPacket) {
 		printf("\n");
 
      }
+
+    (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
+    (*outputFile)<< ntohs(tcph->source)<< ",";
+    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
+    (*outputFile)<< ntohs(tcph->dest)<< ",";
+
+
 	}
 
 	/*UDP*/
@@ -237,17 +241,25 @@ if(LogPacket) {
 		
 		printf("\n");
      }
+     (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
+    (*outputFile)<< ntohs(udph->source)<< ",";
+    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
+    (*outputFile)<< ntohs(udph->dest)<< ",";
+   
 	}
 
 
-
+  (*outputFile)<< std::endl;
+    
 
 }
 
 void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_char* packet) {
+    // cout << ++packetCount << " packet(s) captured" << endl;
   process_packet(pkthdr,packet);
+//   cout << packetCount << " packet(s) captured processed" << endl;
   if(LogPacket) { 
-       cout << ++packetCount << " packet(s) captured" << endl;
+       
   cout<<"Packet length:"<<pkthdr->len<<", time interval:" << pkthdr->ts.tv_sec <<endl;
 //   cout<<"useprData:"<<useprData<<endl;
   cout<<"Packet:"<<string((char*)packet)<<endl;
@@ -323,7 +335,7 @@ void routes() {
 }
 
 int main() {
-  char *dev;
+  char *dev = "lo";
   pcap_t *descr;
   startTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
   char errbuf[PCAP_ERRBUF_SIZE];
@@ -331,13 +343,14 @@ int main() {
   std::thread httpHandler (routes);
   int number_of_time_slots = 100; 
   
+  
 
-  dev = pcap_lookupdev(errbuf);
-  if (dev == NULL) {
-      cout << "pcap_lookupdev() failed: " << errbuf << endl;
-      return 1;
-  }
-
+//   dev = pcap_lookupdev(errbuf);
+//   if (dev == NULL) {
+//       cout << "pcap_lookupdev() failed: " << errbuf << endl;
+//       return 1;
+//   }
+// cout<< "dev: "<< dev<<endl;
   descr = pcap_open_live(dev, BUFSIZ, 0, -1, errbuf);
   if (descr == NULL) {
       cout << "pcap_open_live() failed: " << errbuf << endl;
@@ -347,14 +360,12 @@ int main() {
       cout<<"----- time slot :"<< i << "--------------" << endl;
        outputFile = new std::ofstream ("packetsData_"+std::to_string(i)+".csv");
    (*outputFile) << "Time(uS) , Destination Address , Source Address, Protocol, IP Version, IP Header Length , "<<
-             " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Destination IP " <<  std::endl;
+             " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Source Port, Destination IP, Destination Port, " <<  std::endl;
   if (pcap_loop(descr, 100, packetHandler, NULL) < 0) {
       cout << "pcap_loop() failed: " << pcap_geterr(descr);
       return 1;
   }
-
    outputFile->close();
-
   }
  
   cout<<"listening to http reques" << endl;

@@ -3,10 +3,10 @@ import sys
 import random
 import time
 
-duration = 0.5 #50 ms for Dos attack
+duration = 1 #50 ms for Dos attack
 buffer_size = 1024
 cntr = 0
-server_address = ('localhost', 5367)
+server_address = ('0.0.0.0', 5367)
 
 #use "SOCK_STREAM" for UDP method.
 tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
