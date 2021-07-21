@@ -271,6 +271,7 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
 void routes() {
   httplib::Server svr;
   svr.Get("/dashboard", [](const httplib::Request &, httplib::Response &res) {
+      res.set_header("Access-Control-Allow-Origin", "*");
 	  mLock.lock();
       nlohmann::json response;
       nlohmann::json blackListJSONArray;
@@ -319,19 +320,37 @@ void routes() {
       res.set_content(responseString, "text/plain");
   });
 
-  svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res) {
-        auto ip = req.get_header_value("ip");
-       auto port = req.get_header_value("port");
-       std::cout<<" add-black-list request, ip"<<ip<<", port:"<<port<<std::endl;
-      BlackItem bItem;
-      bItem.ipAddr = ip;
-      bItem.portNumber = std::stoi(port);
-      mLock.lock();
-      bItems.insert(std::pair<std::string, BlackItem>( ip+":"+port, bItem ));
-      mLock.unlock();
-      res.status = 200;
-  });
-  svr.listen("localhost", 9595);
+svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res)
+			 {
+				 nlohmann::json bojason;
+				 stringstream ss;
+				 string str;
+				 try
+				 {
+					 using json = nlohmann::json;
+					 res.set_header("Access-Control-Allow-Origin", "*");
+					 json s = req.body;
+					 bojason = nlohmann::json::parse(req.body);
+					 auto ip = (std::string)bojason["ip"];
+					 auto port = bojason["port"];
+					 ss << port;
+					 ss >> str;
+					 std::cout << " add-black-list request, ip:" << ip << ", port:" << port << std::endl;
+					 BlackItem bItem;
+					 bItem.ipAddr = ip;
+					 bItem.portNumber = port;
+					 mLock.lock();
+					 bItems.insert(std::pair<std::string, BlackItem>(ip + ":" + str, bItem));
+					 mLock.unlock();
+					 res.status = 200;
+					 cout << "Inside try \n";
+				 }
+				 catch (const std::exception &e)
+				 {
+					 std::cout << "exception caught: " << e.what() << '\n';
+				 }
+			 });
+             svr.listen("localhost", 9595);
 }
 
 int main() {
