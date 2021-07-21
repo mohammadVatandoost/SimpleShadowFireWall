@@ -2,4 +2,7 @@ dos_attack.py is a Dos attack program and it can be converted into a DDOS attack
 
 it supports UDP and TCP.
 
-Usage dos_attack.py: ./dos_attack <ip> <port>
+Usage server.py: python server.py
+Usage dos_attack_udp.py: python dos_attack_udp.py
+Usage dos_attack_tcp.py: python dos_attack_tcp.py
+

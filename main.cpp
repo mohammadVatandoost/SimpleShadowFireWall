@@ -141,7 +141,7 @@ if(LogPacket) {
 	printf("   |-Destination IP   : %s\n" , inet_ntoa(dest.sin_addr) );
 }
 
-    (*outputFile)<< (unsigned int)iph->version<< ",";
+   (*outputFile)<< (unsigned int)iph->version<< ",";
     (*outputFile)<< (unsigned int)iph->ihl<< ",";
     (*outputFile)<< ((unsigned int)(iph->ihl))*4<< ",";
     (*outputFile)<< (unsigned int)iph->tos<< ",";
@@ -149,9 +149,6 @@ if(LogPacket) {
     (*outputFile)<< (unsigned int)iph->ttl<< ",";
     (*outputFile)<< (unsigned int)iph->protocol<< ",";
     (*outputFile)<< ntohs(iph->check)<< ",";
-    (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
-    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
-    (*outputFile)<< std::endl;
 
     int header_size=0;
 	/*ICMP*/
@@ -217,6 +214,13 @@ if(LogPacket) {
 		printf("\n");
 
      }
+
+    (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
+    (*outputFile)<< ntohs(tcph->source)<< ",";
+    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
+    (*outputFile)<< ntohs(tcph->dest)<< ",";
+
+
 	}
 
 	/*UDP*/
@@ -237,17 +241,25 @@ if(LogPacket) {
 		
 		printf("\n");
      }
+     (*outputFile)<< inet_ntoa(source.sin_addr)<< ",";
+    (*outputFile)<< ntohs(udph->source)<< ",";
+    (*outputFile)<< inet_ntoa(dest.sin_addr)<< ",";
+    (*outputFile)<< ntohs(udph->dest)<< ",";
+   
 	}
 
 
-
+  (*outputFile)<< std::endl;
+    
 
 }
 
 void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_char* packet) {
+    // cout << ++packetCount << " packet(s) captured" << endl;
   process_packet(pkthdr,packet);
+//   cout << packetCount << " packet(s) captured processed" << endl;
   if(LogPacket) { 
-       cout << ++packetCount << " packet(s) captured" << endl;
+       
   cout<<"Packet length:"<<pkthdr->len<<", time interval:" << pkthdr->ts.tv_sec <<endl;
 //   cout<<"useprData:"<<useprData<<endl;
   cout<<"Packet:"<<string((char*)packet)<<endl;
@@ -259,6 +271,7 @@ void packetHandler(u_char *useprData, const struct pcap_pkthdr* pkthdr, const u_
 void routes() {
   httplib::Server svr;
   svr.Get("/dashboard", [](const httplib::Request &, httplib::Response &res) {
+      res.set_header("Access-Control-Allow-Origin", "*");
 	  mLock.lock();
       nlohmann::json response;
       nlohmann::json blackListJSONArray;
@@ -307,23 +320,41 @@ void routes() {
       res.set_content(responseString, "text/plain");
   });
 
-  svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res) {
-        auto ip = req.get_header_value("ip");
-       auto port = req.get_header_value("port");
-       std::cout<<" add-black-list request, ip"<<ip<<", port:"<<port<<std::endl;
-      BlackItem bItem;
-      bItem.ipAddr = ip;
-      bItem.portNumber = std::stoi(port);
-      mLock.lock();
-      bItems.insert(std::pair<std::string, BlackItem>( ip+":"+port, bItem ));
-      mLock.unlock();
-      res.status = 200;
-  });
-  svr.listen("localhost", 9595);
+svr.Post("/add-black-list", [&](const httplib::Request &req, httplib::Response &res)
+			 {
+				 nlohmann::json bojason;
+				 stringstream ss;
+				 string str;
+				 try
+				 {
+					 using json = nlohmann::json;
+					 res.set_header("Access-Control-Allow-Origin", "*");
+					 json s = req.body;
+					 bojason = nlohmann::json::parse(req.body);
+					 auto ip = (std::string)bojason["ip"];
+					 auto port = bojason["port"];
+					 ss << port;
+					 ss >> str;
+					 std::cout << " add-black-list request, ip:" << ip << ", port:" << port << std::endl;
+					 BlackItem bItem;
+					 bItem.ipAddr = ip;
+					 bItem.portNumber = port;
+					 mLock.lock();
+					 bItems.insert(std::pair<std::string, BlackItem>(ip + ":" + str, bItem));
+					 mLock.unlock();
+					 res.status = 200;
+					 cout << "Inside try \n";
+				 }
+				 catch (const std::exception &e)
+				 {
+					 std::cout << "exception caught: " << e.what() << '\n';
+				 }
+			 });
+             svr.listen("localhost", 9595);
 }
 
 int main() {
-  char *dev;
+  char *dev = "lo";
   pcap_t *descr;
   startTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
   char errbuf[PCAP_ERRBUF_SIZE];
@@ -331,13 +362,14 @@ int main() {
   std::thread httpHandler (routes);
   int number_of_time_slots = 100; 
   
+  
 
-  dev = pcap_lookupdev(errbuf);
-  if (dev == NULL) {
-      cout << "pcap_lookupdev() failed: " << errbuf << endl;
-      return 1;
-  }
-
+//   dev = pcap_lookupdev(errbuf);
+//   if (dev == NULL) {
+//       cout << "pcap_lookupdev() failed: " << errbuf << endl;
+//       return 1;
+//   }
+// cout<< "dev: "<< dev<<endl;
   descr = pcap_open_live(dev, BUFSIZ, 0, -1, errbuf);
   if (descr == NULL) {
       cout << "pcap_open_live() failed: " << errbuf << endl;
@@ -347,14 +379,12 @@ int main() {
       cout<<"----- time slot :"<< i << "--------------" << endl;
        outputFile = new std::ofstream ("packetsData_"+std::to_string(i)+".csv");
    (*outputFile) << "Time(uS) , Destination Address , Source Address, Protocol, IP Version, IP Header Length , "<<
-             " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Destination IP " <<  std::endl;
+             " Type Of Service , IP Total Length , Identification, TTL, Protocol, Checksum, Source IP, Source Port, Destination IP, Destination Port, " <<  std::endl;
   if (pcap_loop(descr, 100, packetHandler, NULL) < 0) {
       cout << "pcap_loop() failed: " << pcap_geterr(descr);
       return 1;
   }
-
    outputFile->close();
-
   }
  
   cout<<"listening to http reques" << endl;
