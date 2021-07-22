@@ -48,25 +48,30 @@ def make_TDG(csvFile):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     print_hi('PyCharm')
-    path = "./Attack-Data/"
-    traffic_tdg=make_TDG("./traffic.csv");
+    trafficPath = "./Traffic-Data/"
+    attackPath = "./Attack-Data/"
     attacks=[]
     #nx.draw(traffic_tdg,  edge_color='r')
     #plt.show()
-    csvData = [f for f in listdir(path) if isfile(join(path, f))]
-    for filePath in csvData:
-        print("Cheking Attack file:", filePath)
-        tdg = make_TDG(path+filePath)
-        nx.draw(tdg,  edge_color='r')
-        check_attack = isomorphism.DiGraphMatcher(tdg, traffic_tdg)
-        if(check_attack.is_isomorphic()):
-            print("     Attack Detected");
-            attacks.append(filePath);
-        else:
-            print("     No Attack");
-    print("#"+str(len(attacks))+" attack(S) Detected in the traffic file!")
+
+    trafficData = [f for f in listdir(trafficPath) if isfile(join(trafficPath, f))]
+    for trafficFile in trafficData:
+        traffic_tdg = make_TDG(trafficPath+trafficFile)
+        nx.draw(traffic_tdg,  edge_color='r',)# title=str(trafficFile))
+        plt.show()
+        
+        attackData = [f for f in listdir(attackPath) if isfile(join(attackPath, f))]
+        for attackFile in attackData:
+            print("Cheking Attack file:", attackFile)
+            attack_tdg = make_TDG(attackPath+attackFile)
+            check_attack = isomorphism.DiGraphMatcher(attack_tdg, traffic_tdg)
+            if(check_attack.is_isomorphic()):
+                print("     Attack Detected");
+                attacks.append(attackPath);
+            else:
+                print("     No Attack");
+    print("#"+str(len(attacks))+" attack(S) Detected in the traffic files!")
     print(attacks)
-        #plt.show()
 
 
 
